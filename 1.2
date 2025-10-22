@@ -1,0 +1,214 @@
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                    STRATEGY HEADER
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//@strategy_alert_message {{strategy.order.alert_message}}
+//@version=6
+strategy("Strategy Engulfing", overlay=true, max_bars_back=5000, max_lines_count=500, max_labels_count=500, calc_on_every_tick=false, calc_on_order_fills=false, process_orders_on_close=true)
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     MT5 SETTINGS (INPUT)
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+userID = input.string("User_1", "User ID", group="Expert Settings")
+lotsize = input.string("0.01", "Lot Size", group="Expert Settings")
+tradingsymbol = input.string("", "Trading Symbol", group="Expert Settings")
+takeprofitpips = input.string("200", "TP Pips", group="Expert Settings")
+stoplosspips = input.string("200", "SL Pips", group="Expert Settings")
+tradecomment = input.string("Engulfing Strategy", "Comment", group="Expert Settings")
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     MT5 MESSAGE CONSTRUCTION
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+longentrymessage = '{"password":"DockYard943","timestamp":"{{timenow}}","unique_key":"'+userID+'","type":"open","lots_fix":"'+lotsize+'","trade_type":"buy","symbol":"'+tradingsymbol+'","take_profit_pips":"'+takeprofitpips+'","stop_loss_pips":"'+stoplosspips+'","comments":"'+tradecomment+'"}'
+shortentrymessage = '{"password":"DockYard943","timestamp":"{{timenow}}","unique_key":"'+userID+'","type":"open","lots_fix":"'+lotsize+'","trade_type":"sell","symbol":"'+tradingsymbol+'","take_profit_pips":"'+takeprofitpips+'","stop_loss_pips":"'+stoplosspips+'","comments":"'+tradecomment+'"}'
+longexitmmessage = '{"password":"DockYard943","unique_key":"'+userID+'","type":"close","lots_fix":"'+lotsize+'","trade_type":"buy","symbol":"'+tradingsymbol+'","comments":"'+tradingsymbol+'"}'
+shortexitmessage = '{"password":"DockYard943","unique_key":"'+userID+'","type":"close","lots_fix":"'+lotsize+'","trade_type":"sell","symbol":"'+tradingsymbol+'","comments":"'+tradingsymbol+'"}'
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     SESSION TIMING INPUT
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+sessionstart = input.string("09:00", "Session Start", group="Session Time")
+sessionend = input.string("18:00", "Session End", group="Session Time")
+sessionstartformatted = str.replace(sessionstart, ":", "")
+sessionendformatted = str.replace(sessionend, ":", "")
+tradingsession = sessionstartformatted + "-" + sessionendformatted + ":1234567"
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     POSITION SIZE
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+positionquantity = input.int(1, "Position Size", group="Position Settings")
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     MA TREND FILTER SETTINGS
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+use_ma_tf = true
+MAtf = input.string("5 minutes", "MA Timeframe", group="MA Settings")
+malength = input.int(100, "MA Length", group="MA Settings")
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     STOP LOSS
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+stoploss = input.int(50, "Stop Loss", group="Strategy Settings")
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                  RISK REWARD SETTINGS
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+RR = input.float(2.0, "RR", group="Strategy Settings")
+//════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     TIMEFRAME CONVERSION
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+converttimeframe(timeframetext) =>
+    string result = switch timeframetext
+        "15 seconds"  => "15S"
+        "30 seconds"  => "30S"
+        "45 seconds"  => "45S"
+        "1 minute"    => "1"
+        "2 minutes"   => "2"
+        "3 minutes"   => "3"
+        "4 minutes"   => "4"
+        "5 minutes"   => "5"
+        "15 minutes"  => "15"
+        "30 minutes"  => "30"
+        "45 minutes"  => "45"
+        "1 hour"      => "60"
+        "2 hours"     => "120"
+        "3 hours"     => "180"
+        "4 hours"     => "240"
+        "12 hours"    => "720"
+        => "5"  // default fallback
+    result
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     MA TREND CALCULATION & PLOT (FIXED - COPIATO DA STRATEGYA 2.4)
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// Calcolo MA base sul timeframe corrente
+malinebase = ta.sma(close[1], malength)
+
+// Conversione timeframe e request.security
+matf1_variable = 0.0
+matimeframe_converted = converttimeframe(MAtf)
+matf1_security = request.security(syminfo.tickerid, matimeframe_converted, malinebase[1], lookahead=barmerge.lookahead_on)
+
+// Funzione per rilevare nuova barra (non utilizzata ma presente nell'originale)
+is_new_bar(tf) =>
+    ta.change(time(tf)) != 0
+
+// Assegnazione finale
+matf1_variable := matf1_security
+
+// PLOT della MA in ARANCIONE (come nell'originale)
+plot(matf1_variable, linewidth=2, color=color.orange, title="MA Trend Line")
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     WEEKDAY FILTER
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+tradingdays = (dayofweek == dayofweek.monday) or (dayofweek == dayofweek.tuesday) or (dayofweek == dayofweek.wednesday) or (dayofweek == dayofweek.thursday) or (dayofweek == dayofweek.friday)
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     DAYLIGHT SAVINGS TIME 
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+timezonea = input("GMT+2", title="Time-Zone A(same year)", group = "Daylight Savings Check")
+startday  = input.int(title="D:(Start)", defval=01,   minval=1,    maxval=31,   inline = 'Start', group = "Daylight Savings")
+startmonth = input.int(title="M:(Start)", defval=04,    minval=1,    maxval=12,   inline = 'Start', group = "Daylight Savings")
+endday   = input.int(title="D:(End)", defval=26,    minval=1,    maxval=31,   inline = 'End',   group = "Daylight Savings")
+endmonth   = input.int(title="M:(End)", defval=10,   minval=1,    maxval=12,   inline = 'End',   group = "Daylight Savings")
+inDateRangeCheck1 = (time >= timestamp(syminfo.timezone,year, startmonth, startday, 0, 0)) 
+     and (time < timestamp(syminfo.timezone, year, endmonth, endday, 0, 0))
+ 
+timezoneB = input("GMT+1", title="Time-Zone B (Excluding Timezone A)", group = "Daylight Savings Check")
+timezone = inDateRangeCheck1 ? timezonea : timezoneB
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     SESSION CHECK
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+sessionbgcolor = color.orange
+sessionTime = time(timeframe.period, tradingsession, timezone)
+isInSession = na(sessionTime) ? false : true
+bgcolor(isInSession ? color.new(sessionbgcolor, 90) : na)
+
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     ENGULFING PATTERN DETECTION
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// Determine if previous candle was bullish or bearish
+previouscandlebullish = close[1] > open[1]
+previouscandlebearish = close[1] < open[1]
+
+// Determine if current candle is bullish or bearish
+currentcandlebullish = close > open
+currentcandlebearish = close < open
+
+// BULLISH ENGULFING: Current green candle engulfs previous red candle
+bullishengulfing = previouscandlebearish and currentcandlebullish and close > high[1] and low < low[1]
+
+// BEARISH ENGULFING: Current red candle engulfs previous green candle
+bearishengulfing = previouscandlebullish and currentcandlebearish and close < low[1] and high > high[1]
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     ENTRY CONDITIONS
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+longtrendfilter = not use_ma_tf or close > matf1_variable
+shorttrendfilter = not use_ma_tf or close < matf1_variable
+
+// Complete Long Entry Condition
+longentrycondition = bullishengulfing and isInSession and tradingdays and longtrendfilter
+// Complete Short Entry Condition
+shortentrycondition = bearishengulfing and isInSession and tradingdays and shorttrendfilter
+// Plot entry signals
+plotshape(longentrycondition and strategy.position_size == 0, style=shape.labelup, location=location.belowbar, color=color.green, text="BUY", textcolor=color.white, size=size.small)
+plotshape(shortentrycondition and strategy.position_size == 0, style=shape.labeldown, location=location.abovebar, color=color.red, text="SELL", textcolor=color.white, size=size.small)
+
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     POSITION VARIABLES
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+var float longentryprice = 0.0
+var float shortentryprice = 0.0
+var float longstoploss = 0.0
+var float shortstoploss = 0.0
+var float longtakeprofit = 0.0
+var float shorttakeprofit = 0.0
+
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     STOP LOSS CALCULATION
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+stoplossdistance = str.tonumber(str.tostring(stoploss))
+if syminfo.type == "forex"
+    stoplossdistance := syminfo.mintick * (syminfo.type == "forex" ? 0.00 + stoploss : stoploss)
+
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     ENTRY ORDERS EXECUTION
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// LONG ENTRY
+if longentrycondition and strategy.position_size == 0
+    longentryprice := close
+    longstoploss := longentryprice - stoplossdistance
+    longtakeprofit := longentryprice + RR * (longentryprice - longstoploss)
+    strategy.order("Long Entry", strategy.long, positionquantity, comment="Buy", alert_message=longentrymessage)
+
+// SHORT ENTRY
+if shortentrycondition and strategy.position_size == 0
+    shortentryprice := close
+    shortstoploss := shortentryprice + stoplossdistance
+    shorttakeprofit := shortentryprice - RR * (shortstoploss - shortentryprice)
+    strategy.order("Short Entry", strategy.short, positionquantity, comment="Sell", alert_message=shortentrymessage)
+
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     EXIT ORDERS MANAGEMENT
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// LONG POSITION MANAGEMENT
+if strategy.position_size > 0
+    longentryprice := strategy.position_avg_price
+    strategy.order("Long TP", strategy.short, positionquantity, limit=longtakeprofit, comment="Buy TP", oca_name="Long", oca_type=strategy.oca.cancel, disable_alert=true)
+    strategy.order("Long SL", strategy.short, math.abs(strategy.position_size), stop=longstoploss, comment="Buy SL", oca_name="Long", oca_type=strategy.oca.cancel, disable_alert=true)
+
+// SHORT POSITION MANAGEMENT
+if strategy.position_size < 0
+    shortentryprice := strategy.position_avg_price
+    strategy.order("Short TP", strategy.long, positionquantity, limit=shorttakeprofit, comment="Sell TP", oca_name="Short", oca_type=strategy.oca.cancel, disable_alert=true)
+    strategy.order("Short SL", strategy.long, math.abs(strategy.position_size), stop=shortstoploss, comment="Sell SL", oca_name="Short", oca_type=strategy.oca.cancel, disable_alert=true)
+
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//                     POSITION VISUALIZATION (FIXED - ANCORATI A GRAFICO CON PLOT.STYLE_STEPLINEBR)
+//══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// Long Position Lines
+longsldrawn = plot(strategy.position_size > 0 ? longstoploss : na, color=color.red, linewidth=1, style=plot.style_steplinebr, title="Long Stop Loss")
+longentrydrawn = plot(strategy.position_size > 0 ? longentryprice : na, color=color.blue, linewidth=1, style=plot.style_steplinebr, title="Long Entry")
+longtpdrawn = plot(strategy.position_size > 0 ? longtakeprofit : na, color=color.green, linewidth=1, style=plot.style_steplinebr, title="Long Take Profit")
+
+// Short Position Lines
+shortsldrawn = plot(strategy.position_size < 0 ? shortstoploss : na, color=color.red, linewidth=1, style=plot.style_steplinebr, title="Short Stop Loss")
+shortentrydrawn = plot(strategy.position_size < 0 ? shortentryprice : na, color=color.blue, linewidth=1, style=plot.style_steplinebr, title="Short Entry")
+shorttpdrawn = plot(strategy.position_size < 0 ? shorttakeprofit : na, color=color.green, linewidth=1, style=plot.style_steplinebr, title="Short Take Profit")
+
+// Fill areas for risk and reward zones (85% trasparenza come nell'originale)
+fill(longsldrawn, longentrydrawn, color=color.new(color.red, 85), title="Long Risk Zone")
+fill(shortsldrawn, shortentrydrawn, color=color.new(color.red, 85), title="Short Risk Zone")
+fill(longentrydrawn, longtpdrawn, color=color.new(color.green, 85), title="Long Reward Zone")
+fill(shortentrydrawn, shorttpdrawn, color=color.new(color.green, 85), title="Short Reward Zone")
